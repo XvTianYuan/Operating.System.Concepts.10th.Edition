@@ -605,6 +605,100 @@ POSIX 指定了下面两种设置和获取调度策略的API：
 
 两个函数的第一个参数指向了线程的属性，第二个参数：指向了用于设置了当前调度策略的整数(pthread_attr_getsched_policy())；或为pthread_attr_setsched_policy()函数提供了整型入参(SCHED_FIFO, SCHED_RR, 或SCHED_OTHER)。两个函数在发生错误时返回非0值。
 
-图5.25描述了使用该API的POSIX Pthread程序，该程序首选确定当前的调度策略并设置调度算法为SCHED_FIFO。
+5.7章的代码描述了使用该API的POSIX Pthread程序，该程序首选确定当前的调度策略并设置调度算法为SCHED_FIFO。
 
 ### 5.7 Operating-System Examples
+
+下面讲述以下Linux，Windows和Solaris操作系统中的调度策略。需要注意的是，此处使用了术语"进程调度"，实际上，下面会描述Solaris和Windows系统的内核线程调度以及Linux中的任务(task)调度。
+
+#### 5.7.1 Example: Linux Scheduling
+
+Linux中的进程调度有段有趣的历史。在2.5版本之前，Linux内核使用传统的UNIX调度算法，但这种算法在设计时没有考虑SMP系统，因此不能够充分支持使用多处理器的系统。此外，在大量进程运行时的性能很低。在2.5内核中，调度器进行了重大修改，并引入了一种调度算法(算法复杂度为O(1))。该O(1)调度器支持了SMP系统，包括多处理器亲和力和多处理器间的负载均衡。然而，在实践中，虽然该O(1)调度器在SMP系统上的性能很好，但却导致很多桌面计算机系统中交互式进程的响应时间低下。在2.6内核的开发中，对调度器进行了修改，并在2.6.23的内核中，完全公平调度器(CFS)称为了Linux的默认调度算法。
+
+```c
+#include <pthread.h>
+#include <stdio.h>
+#define NUM THREADS 5
+
+int main(int argc, char *argv[])
+{
+    int i, policy;
+    pthread_t tid[NUM_THREADS];
+    pthread_attr_t attr;
+	
+    /* get the default attributes */
+    pthread_attr_init(&attr);
+	
+    /* get the current scheduling policy */
+    if (pthread_attr_getschedpolicy(&attr, &policy) != 0)
+        fprintf(stderr, "Unable to get policy.∖n");
+    else {
+        if (policy == SCHED_OTHER)
+            printf("SCHED_OTHER∖n");
+        else if (policy == SCHED_RR)
+            printf("SCHED_RR∖n");
+        else if (policy == SCHED_FIFO)
+            printf("SCHED_FIFO∖n");
+    }
+    /* set the scheduling policy - FIFO, RR, or OTHER */
+    if (pthread_attr_setschedpolicy(&attr, SCHED_FIFO) != 0)
+        fprintf(stderr, "Unable to set policy.∖n");
+		
+    /* create the threads */
+    for (i = 0; i < NUM_THREADS; i++)
+        pthread_create(&tid[i],&attr,runner,NULL);
+	
+    /* now join on each thread */
+    for (i = 0; i < NUM_THREADS; i++)
+        pthread_join(tid[i], NULL);
+}
+/* Each thread will begin control in this function */
+```
+
+Linux系统中的调度基于调度等级。每个等级分配了一个指定的优先级。通过使用不同的调度等级，内核可以根据系统和进程的需要来使用不同的调度算法。例如，Linux服务器的调度准则可能与运行在Linux上的移动设备的调度准则不同。为了决定下一个运行哪个任务，调度器从高优先调度等级中选择最高优先级的任务运行。标准Linux系统实现了两种调度等级：使用CFS调度算法的默认调度等级；实时调度等级。后面会讨论则两种等级，当然也可以添加新的调度等级。
+
+CFS调度器为每个任务分配了一定比例的CPU处理时间，而不是使用将相对优先级与时间量长度相关联的严格规则。该比例通过分配给每个任务的nice值计算出来。Nice值范围为-20到+19，更低的nice值标识更高的相对优先级。有更低nice值的任务会分配到更高比例的CPU运行时间。默认的nice值为0。(术语nice的来源为，如果一个任务将其nice值从0增加到+10，通过降低其相对优先级来更好地系统中的其他任务，即好的进程会最后完成)CFS不会使用离散的时间片值，而定义了"目标延迟"(targeted latency)，即每个任务至少运行一次的时间。系统根据目标延迟的值来分配CPU比例。除了使用默认值和最小值，当系统中激活的任务超过一个特定阈值时可以增加目标延迟。
+
+CFS调度器不会直接分配优先级，相反，它通过维护虚拟运行时间(virtual run time,每个任务都有一个与其对应的变量vruntime)记录了每个任务的运行时间。虚拟运行时间与基于任务优先级的衰减因子有关：低优先级任务比高优先级任务的衰减比率高。对于普通优先级(nice值为0)的任务，虚拟运行时间等于实际的物理运行时间。因此，如果一个默认优先级的任务运行了200毫秒，则其vruntime也为200毫秒。然而，一个低优先级的任务运行了200毫秒，其虚拟运行时间要高于200毫秒。类似的，一个高优先级任务运行了200毫秒，其vruntime要小于200毫秒。为了决定下一个运行的任务，调度器会简单地挑选具有最低vruntime值的任务，这样，高优先级的任务可能抢占低优先级任务。
+
+以CFS调度器为例：假设两个任务有相同的nice值，一种是I/O密集型任务，另一种是CPU密集型任务。通常，I/O密集型任务在阻塞等待I/O前的运行周期比较短，而CPU密集型任务的运行周期等于其在处理器上的运行时间。因此，I/O密集型任务的vruntime低于CPU密集型任务，且I/O密集型任务的优先级要高于CPU密集型任务。即，当CPU密集型任务正在运行时，如果需要运行一个I/O密集型任务(例如，等待I/O的任务可以继续运行)，则I/O密集型任务会抢占CPU密集型任务。
+
+​																			*CFS PERFORMANCE*
+
+*Linux CFS调度器提供了一种高效选择下一个任务运行的算法。每个可运行的任务被放置到了一颗红黑树中(平衡二叉查找树，key为vruntime)，该树的结构如下：*
+
+![CFS](./images/CFS.png)
+
+*当一个任务可运行时，它会添加到该树中。如果树中的一个任务不可运行(如，由于等待I/O阻塞)，则会从该树中移除。通常来讲，分配了较少处理时间(小的vruntime)的任务会被放到树的左侧，而分配了较多处理时间的任务会被放到右侧。根据二叉树侧的特点，最左侧的节点的key值最小，对于CFS调度器来说，该节点对应的任务的优先级最高。由于红黑树是平衡的，搜索最左端节点会花费O(log N)的操作(N位树的节点数)。然而，为了效率，Linux调度器会使用变量rb_leftmost缓存该值，可以使用该值来决定下一个需要运行的任务。*
+
+Linux也使用POSIX标准实现了实时调度。任何使用SCHED_FIFO或SCHED_RR实时策略调度运行的任务相比普通任务(非实时)由更高的优先级。Linux使用两种独立的优先级范围，一种给实时任务，一种给普通任务。实时任务分配了静态的优先级，范围为0到99。普通分配的优先级范围为100到139。这两种范围会映射到全局优先级中，其中数值越小，相对优先级越高。普通任务根据nice值分配优先级，-20对应优先级100，+19对应优先级139。该方案如图5.26所示：
+
+![5.26](./images/5.26.png)
+
+CFS调度器也支持负载均衡，使用一种先进的技术来均衡处理内核之间的负载，同时也支持NUMA并最小化线程的迁移。CFS通过线程的优先级和平均CPU利用率定义了每个线程的负载。即，一个有高优先级，但CPU使用低(通常是I/O密集型)的任务的负载通常比较低，类似地，负载低的线程的CPU利用率则比较高。使用这种指标，队列的负载为队列中所有线程的负载之和，均衡时需要保证所有队列具有几乎相同的负载。
+
+正如5.4章节重点讲述的，迁移一个线程可能会导致导致内存访问惩罚(由于NUMA系统上无效的缓存内容，会增加内存访问时间)。为了解决这种问题，Linux定义了一种调度域等级系统。一个调度域为能够进行均衡的一组CPU核，参见图5.27，CPU核根据系统共享资源的方式划分了调度域。例如，虽然图5.27中的每个核都有其L1缓存，但一组核会更新一个L2缓存，并以此划分为domain0和domain1。这两个域更新了一个L3缓存，因此同属于一个处理器级别的域(即，NUMA node)。更进一步讲，一个NUMA系统为一个大型系统级别的域，其包含多个处理器级别的NUMA node。
+
+![5.27](./images/5.27.png)
+
+CFS运行的策略是从最低等级的域开始，在多个域中进行均衡负载。以图5.27为例，初始化一个线程时，仅会在相同域内的核上发生迁移(即，domain0或domain1)。负载均衡发生在domain0和domain1之间。如果一个线程需要迁离其本地内存，则CFS不推荐将该进程在node间进行迁移，这种迁移只会发生在严重的负载失衡时。
+
+#### 5.7.2 Example: Windows Scheduling ~ 5.7.3 Example: Solaris Scheduling
+
+ignore
+
+### 5.8 Algorithm Evaluation
+
+如何为特定系统选择CPU调度算法呢？正如在5.3章节中看到的，有多种调度算法，且每个调度算法都有各自的参数，因此算法的选择比较困难。
+
+第一个困难点在于如何定义选择算法的准则。在5.2章节中，选择算法的准则基于CPU利用率，响应时间或吞吐量。为了选择一种算法，必须首先定义这些元素的相对重要度。我们的准则可能包含如下几种措施：
+
+- 最大响应时间为300毫秒限制下的最大CPU利用率
+- 最大吞吐量下，周转时间与总执行时间成线性比例
+
+![5.30](./images/5.30.png)
+
+一旦定义了选择的准则，我们希望在这种考量下估算所需要的算法。下面会介绍几种估算的方法。
+
+#### 5.8.1 Deterministic Modeling
+
