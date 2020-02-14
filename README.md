@@ -9,5 +9,5 @@ Operating.System.Concepts.10th.Edition中文翻译
 
 [chapter9 主存](Operating.System.Concepts中文/part%20four/chapter%209%20主存/主存.md)
 
-
+[chapter10 虚拟内存](Operating.System.Concepts中文/part%20four/chapter%2010%20虚拟内存/虚拟内存.md)
 
