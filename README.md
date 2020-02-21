@@ -11,3 +11,5 @@ Operating.System.Concepts.10th.Edition中文翻译
 
 [chapter10 虚拟内存](Operating.System.Concepts中文/part%20four/chapter%2010%20虚拟内存/虚拟内存.md)
 
+[chapter 12 I/O系统](Operating.System.Concepts中文/part%20five/chapter%2012%20IO系统/chapter 12 IO系统.md)
+
