@@ -15,3 +15,5 @@ Operating.System.Concepts.10th.Edition中文翻译
 
 [chapter13 文件系统](Operating.System.Concepts中文/part%20six/chapter%2013%20文件系统/文件系统.md)
 
+[chapter14 文件系统的实现](Operating.System.Concepts中文/part%20six/chapter%2014%20文件系统的实现/文件系统的实现.md)
+
