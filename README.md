@@ -13,5 +13,5 @@ Operating.System.Concepts.10th.Edition中文翻译
 
 [chapter12 I/O系统](Operating.System.Concepts中文/part%20five/chapter%2012%20IO系统/IO系统.md)
 
-[chapter13 文件系统](Operating.System.Concepts中文/part%20six/chapter%206%20文件系统/文件系统.md)
+[chapter13 文件系统](Operating.System.Concepts中文/part%20six/chapter%2013%20文件系统/文件系统.md)
 
